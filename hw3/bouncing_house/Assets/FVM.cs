@@ -12,6 +12,11 @@ public class FVM : MonoBehaviour
     float stiffness_1 	= 5000.0f;
     float damp			= 0.999f;
 	Vector3 gravity = new Vector3(0, -9.8f, 0);
+
+	private Vector3 floorPos = new Vector3(0, -3, 0);
+	private Vector3 floorNormal = new Vector3(0, 1, 0);
+	private float muN = 0.5f;
+	private float muT = 0.5f;
 	
 	int[] 		Tet;
 	int tet_number;			//The number of tetrahedra
@@ -196,26 +201,31 @@ public class FVM : MonoBehaviour
 			// Debug.Log("dm" + tet+ " " + deformedMatrix);
 
 			Matrix4x4 F = deformedMatrix * inv_Dm[tet]; // deformation gradient
-			// Debug.Log("F" + tet+ " " + F);
+			if(tet == 0)
+				Debug.Log("F" + tet+ " " + F);
 
     		
     		//TODO: Green Strain
 
 			Matrix4x4 G = Matrix_Multiply_With_Float(Matrix_Subtraction(F.transpose * F,  Matrix4x4.identity), 0.5f);
-			// Debug.Log("G" + tet+ " " + G);
+			if(tet == 0)
+				Debug.Log("G" + tet+ " " + G);
 
 
     		//TODO: Second PK Stress
 
 			Matrix4x4 S = Matrix_Add(Matrix_Multiply_With_Float(G, 2.0f * stiffness_1), Matrix_Multiply_With_Float(Matrix4x4.identity, stiffness_0 * trace(G)));
-			// Debug.Log("S" + tet+ " " + S);
+			if(tet == 0)
+				Debug.Log("S" + tet+ " " + S);
 
 			Matrix4x4 P = F * S;
-			// Debug.Log("P" + tet+ " " + P);
+			if(tet == 0)
+				Debug.Log("P" + tet+ " " + P);
 
     		//TODO: Elastic Force
 			Matrix4x4 Forces = Matrix_Multiply_With_Float(P * inv_Dm[tet].transpose, - 1.0f / (6.0f * inv_Dm[tet].determinant)) ;
-			// Debug.Log("Forces" + tet+ " " + Forces);
+			if(tet == 0)
+				Debug.Log("Forces" + tet+ " " + Forces);
 			
 			Force[Tet[tet*4+1]] += (Vector3)Forces.GetColumn(0);
 			Force[Tet[tet*4+2]] += (Vector3)Forces.GetColumn(1);
@@ -230,31 +240,55 @@ public class FVM : MonoBehaviour
 
 		Laplacian_Smooth();
 
-    	for(int i=0; i<number; i++)
+    	// for(int i=0; i<number; i++)
+    	// {
+    	// 	//TODO: Update X and V here.
+		// 	// Debug.Log("prev v" + i + " " + V[i]);
+		// 	V[i] += dt * Force[i] / mass;
+		// 	V[i] *= damp;
+
+		// 	X[i] += dt * V[i];
+
+    	// 	//TODO: (Particle) collision with floor.
+				
+		// 	if ((Vector3.Dot((X[i] - floor_plane), floor_normal)) < 0 && Vector3.Dot(V[i], floor_normal) < 0) {
+		// 		Vector3 v_ni = Vector3.Dot(V[i], floor_normal) * floor_normal;
+		// 		Vector3 v_ti = V[i] - v_ni;
+		// 		// reduce oscillation
+		// 		restitution = Mathf.Max(restitution - 0.001f, 0); 
+		// 		float a = Mathf.Max(0, 1.0f - frition * (1 + restitution) * v_ni.magnitude / v_ti.magnitude);
+		// 		v_ni = -restitution * v_ni;
+		// 		v_ti = a * v_ti;
+		// 		V[i] = v_ni + v_ti;
+		// 		X[i] -= Vector3.Dot((X[i] - floor_plane), floor_normal) * floor_normal;
+		// 	}
+		// 	if(i == 0) {
+		// 		Debug.Log("update v" + i + " " + V[i]);
+		// 		Debug.Log("update x" + i + " " + X[i]);
+		// 	}
+    	// }
+		for(int i = 0; i < number; i++)
     	{
     		//TODO: Update X and V here.
-			// Debug.Log("prev v" + i + " " + V[i]);
-			V[i] += dt * Force[i] / mass;
-			V[i] *= damp;
-
-			X[i] += dt * V[i];
-
-    		//TODO: (Particle) collision with floor.
-				
-			if ((Vector3.Dot((X[i] - floor_plane), floor_normal)) < 0 && Vector3.Dot(V[i], floor_normal) < 0) {
-				Vector3 v_ni = Vector3.Dot(V[i], floor_normal) * floor_normal;
-				Vector3 v_ti = V[i] - v_ni;
-				// reduce oscillation
-				restitution = Mathf.Max(restitution - 0.001f, 0); 
-				float a = Mathf.Max(0, 1.0f - frition * (1 + restitution) * v_ni.magnitude / v_ti.magnitude);
-				v_ni = -restitution * v_ni;
-				v_ti = a * v_ti;
-				V[i] = v_ni + v_ti;
-				X[i] -= Vector3.Dot((X[i] - floor_plane), floor_normal) * floor_normal;
+            V[i] += dt * Force[i] / mass;
+            V[i] *= damp;
+            X[i] += dt * V[i];
+            
+            //TODO: (Particle) collision with floor.
+            float signedDis = Vector3.Dot(X[i] - floorPos, floorNormal);
+            if (signedDis < 0 && Vector3.Dot(V[i], floorNormal) < 0)
+            {
+	            X[i] -= signedDis * floorNormal;
+	            Vector3 vN = Vector3.Dot(V[i], floorNormal) * floorNormal;
+	            Vector3 vT = V[i] - vN;
+	            float a = Math.Max(1 - muT * (1 + muN) * vN.magnitude / vT.magnitude, 0);
+	            V[i] = -muN * vN + a * vT;
+            }
+			if(i == 0) {
+				Debug.Log("update v" + i + " " + V[i]);
+				Debug.Log("update x" + i + " " + X[i]);
 			}
-			// Debug.Log("update v" + i + " " + V[i]);
-			// Debug.Log("update x" + i + " " + X[i]);
-    	}
+        }
 
     }
 
