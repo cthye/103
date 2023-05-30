@@ -12,7 +12,7 @@ public class FVM : MonoBehaviour
     float stiffness_1 	= 5000.0f;
     float damp			= 0.999f;
 	Vector3 gravity = new Vector3(0, -9.8f, 0);
-
+	
 	int[] 		Tet;
 	int tet_number;			//The number of tetrahedra
 
@@ -30,7 +30,7 @@ public class FVM : MonoBehaviour
 	SVD svd = new SVD();
 
 	// floor plane and normal
-	Vector3 floor_plane = new Vector3(0, 0.01f, 0);
+	Vector3 floor_plane = new Vector3(0, -3.0f, 0);
 	Vector3 floor_normal = new Vector3(0, 1, 0);
 	float restitution 	= 0.5f;					// for collision, 反弹系数
 	float frition = 0.5f; 						// for collision, 摩擦系数
@@ -78,7 +78,7 @@ public class FVM : MonoBehaviour
 	    		X[i].z=temp;
 	    	}
 		}
-        // /*
+        /*
 		tet_number=1;
         Tet = new int[tet_number*4];
         Tet[0]=0;
@@ -94,7 +94,7 @@ public class FVM : MonoBehaviour
         X[1]= new Vector3(1, 0, 0);
         X[2]= new Vector3(0, 1, 0);
         X[3]= new Vector3(0, 0, 1);
-		// */
+		*/
 
 
         //Create triangle mesh.
@@ -140,7 +140,7 @@ public class FVM : MonoBehaviour
 		//TODO: Need to allocate and assign inv_Dm
 		inv_Dm = new Matrix4x4[tet_number];
 		for (int t = 0; t < tet_number; t++) {
-			inv_Dm[t] = Build_Edge_Matrix(t);
+			inv_Dm[t] = Build_Edge_Matrix(t).inverse;
 		}
     }
 
@@ -170,7 +170,7 @@ public class FVM : MonoBehaviour
 
 		ret[3, 3] = 1;
 
-		return ret.inverse;
+		return ret;
     }
 
     void _Update()
@@ -193,40 +193,42 @@ public class FVM : MonoBehaviour
     	{
     		//TODO: Deformation Gradient
 			Matrix4x4 deformedMatrix = Build_Edge_Matrix(tet);
-			Debug.Log("dm" + tet+ " " + deformedMatrix);
+			// Debug.Log("dm" + tet+ " " + deformedMatrix);
 
 			Matrix4x4 F = deformedMatrix * inv_Dm[tet]; // deformation gradient
-			Debug.Log("F" + tet+ " " + F);
+			// Debug.Log("F" + tet+ " " + F);
 
     		
     		//TODO: Green Strain
 
 			Matrix4x4 G = Matrix_Multiply_With_Float(Matrix_Subtraction(F.transpose * F,  Matrix4x4.identity), 0.5f);
-			Debug.Log("G" + tet+ " " + G);
+			// Debug.Log("G" + tet+ " " + G);
 
 
     		//TODO: Second PK Stress
 
 			Matrix4x4 S = Matrix_Add(Matrix_Multiply_With_Float(G, 2.0f * stiffness_1), Matrix_Multiply_With_Float(Matrix4x4.identity, stiffness_0 * trace(G)));
-			Debug.Log("S" + tet+ " " + S);
+			// Debug.Log("S" + tet+ " " + S);
 
 			Matrix4x4 P = F * S;
-			Debug.Log("P" + tet+ " " + P);
+			// Debug.Log("P" + tet+ " " + P);
 
     		//TODO: Elastic Force
 			Matrix4x4 Forces = Matrix_Multiply_With_Float(P * inv_Dm[tet].transpose, - 1.0f / (6.0f * inv_Dm[tet].determinant)) ;
-			Debug.Log("Forces" + tet+ " " + Forces);
+			// Debug.Log("Forces" + tet+ " " + Forces);
 			
 			Force[Tet[tet*4+1]] += (Vector3)Forces.GetColumn(0);
 			Force[Tet[tet*4+2]] += (Vector3)Forces.GetColumn(1);
 			Force[Tet[tet*4+3]] += (Vector3)Forces.GetColumn(2);
 			Force[Tet[tet*4+0]] += - Force[Tet[tet*4+1]] - Force[Tet[tet*4+2]] - Force[Tet[tet*4+3]];
-			Debug.Log("update Force" + Tet[tet*4+0] + " " + Force[Tet[tet*4+0]]);
-			Debug.Log("update Force" + Tet[tet*4+1] + " " + Force[Tet[tet*4+1]]);
-			Debug.Log("update Force" + Tet[tet*4+2] + " " + Force[Tet[tet*4+2]]);
-			Debug.Log("update Force" + Tet[tet*4+3] + " " + Force[Tet[tet*4+3]]);
+			// Debug.Log("update Force" + Tet[tet*4+0] + " " + Force[Tet[tet*4+0]]);
+			// Debug.Log("update Force" + Tet[tet*4+1] + " " + Force[Tet[tet*4+1]]);
+			// Debug.Log("update Force" + Tet[tet*4+2] + " " + Force[Tet[tet*4+2]]);
+			// Debug.Log("update Force" + Tet[tet*4+3] + " " + Force[Tet[tet*4+3]]);
 
     	}
+
+		Laplacian_Smooth();
 
     	for(int i=0; i<number; i++)
     	{
@@ -234,13 +236,12 @@ public class FVM : MonoBehaviour
 			// Debug.Log("prev v" + i + " " + V[i]);
 			V[i] += dt * Force[i] / mass;
 			V[i] *= damp;
-			Debug.Log("update v" + i + " " + V[i]);
 
 			X[i] += dt * V[i];
 
     		//TODO: (Particle) collision with floor.
 				
-			if ((Vector3.Dot((X[i] - floor_plane), floor_normal)) < 0) {
+			if ((Vector3.Dot((X[i] - floor_plane), floor_normal)) < 0 && Vector3.Dot(V[i], floor_normal) < 0) {
 				Vector3 v_ni = Vector3.Dot(V[i], floor_normal) * floor_normal;
 				Vector3 v_ti = V[i] - v_ni;
 				// reduce oscillation
@@ -251,10 +252,10 @@ public class FVM : MonoBehaviour
 				V[i] = v_ni + v_ti;
 				X[i] -= Vector3.Dot((X[i] - floor_plane), floor_normal) * floor_normal;
 			}
-			Debug.Log("update x" + i + " " + X[i]);
+			// Debug.Log("update v" + i + " " + V[i]);
+			// Debug.Log("update x" + i + " " + X[i]);
     	}
 
-		Laplacian_Smooth();
     }
 
     // Update is called once per frame
