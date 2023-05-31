@@ -13,11 +13,6 @@ public class FVM : MonoBehaviour
     float damp			= 0.999f;
 	Vector3 gravity = new Vector3(0, -9.8f, 0);
 
-	private Vector3 floorPos = new Vector3(0, -3, 0);
-	private Vector3 floorNormal = new Vector3(0, 1, 0);
-	private float muN = 0.5f;
-	private float muT = 0.5f;
-	
 	int[] 		Tet;
 	int tet_number;			//The number of tetrahedra
 
@@ -201,95 +196,82 @@ public class FVM : MonoBehaviour
 			// Debug.Log("dm" + tet+ " " + deformedMatrix);
 
 			Matrix4x4 F = deformedMatrix * inv_Dm[tet]; // deformation gradient
-			if(tet == 0)
-				Debug.Log("F" + tet+ " " + F);
+			// if(tet == 0)
+			// 	Debug.Log("F" + tet+ " " + F);
 
     		
     		//TODO: Green Strain
 
 			Matrix4x4 G = Matrix_Multiply_With_Float(Matrix_Subtraction(F.transpose * F,  Matrix4x4.identity), 0.5f);
-			if(tet == 0)
-				Debug.Log("G" + tet+ " " + G);
+			// if(tet == 0)
+			// 	Debug.Log("G" + tet+ " " + G);
 
 
     		//TODO: Second PK Stress
 
 			Matrix4x4 S = Matrix_Add(Matrix_Multiply_With_Float(G, 2.0f * stiffness_1), Matrix_Multiply_With_Float(Matrix4x4.identity, stiffness_0 * trace(G)));
-			if(tet == 0)
-				Debug.Log("S" + tet+ " " + S);
+			// if(tet == 0)
+			// 	Debug.Log("S" + tet+ " " + S);
 
 			Matrix4x4 P = F * S;
-			if(tet == 0)
-				Debug.Log("P" + tet+ " " + P);
+			// if(tet == 0)
+			// 	Debug.Log("P" + tet+ " " + P);
 
     		//TODO: Elastic Force
 			Matrix4x4 Forces = Matrix_Multiply_With_Float(P * inv_Dm[tet].transpose, - 1.0f / (6.0f * inv_Dm[tet].determinant)) ;
-			if(tet == 0)
-				Debug.Log("Forces" + tet+ " " + Forces);
+			// if(tet == 0)
+			// 	Debug.Log("Forces" + tet+ " " + Forces);
 			
-			Force[Tet[tet*4+1]] += (Vector3)Forces.GetColumn(0);
-			Force[Tet[tet*4+2]] += (Vector3)Forces.GetColumn(1);
-			Force[Tet[tet*4+3]] += (Vector3)Forces.GetColumn(2);
-			Force[Tet[tet*4+0]] += - Force[Tet[tet*4+1]] - Force[Tet[tet*4+2]] - Force[Tet[tet*4+3]];
-			// Debug.Log("update Force" + Tet[tet*4+0] + " " + Force[Tet[tet*4+0]]);
-			// Debug.Log("update Force" + Tet[tet*4+1] + " " + Force[Tet[tet*4+1]]);
-			// Debug.Log("update Force" + Tet[tet*4+2] + " " + Force[Tet[tet*4+2]]);
-			// Debug.Log("update Force" + Tet[tet*4+3] + " " + Force[Tet[tet*4+3]]);
+			Force[Tet[tet*4]].x += -1 * (Forces[0,0] + Forces[0,1] + Forces[0,2]);
+	        Force[Tet[tet*4]].y += -1 * (Forces[1,0] + Forces[1,1] + Forces[1,2]);
+	        Force[Tet[tet*4]].z += -1 * (Forces[2,0] + Forces[2,1] + Forces[2,2]);
+	        Force[Tet[tet*4+1]].x += Forces[0,0];
+	        Force[Tet[tet*4+1]].y += Forces[1,0];
+	        Force[Tet[tet*4+1]].z += Forces[2,0];
+	        Force[Tet[tet*4+2]].x += Forces[0,1];
+	        Force[Tet[tet*4+2]].y += Forces[1,1];
+	        Force[Tet[tet*4+2]].z += Forces[2,1];
+	        Force[Tet[tet*4+3]].x += Forces[0,2];
+	        Force[Tet[tet*4+3]].y += Forces[1,2];
+	        Force[Tet[tet*4+3]].z += Forces[2,2];
+			// if(tet == 0) {
+			// 	Debug.Log("update Force" + Tet[tet*4+0] + " " + Force[Tet[tet*4+0]]);
+			// 	Debug.Log("update Force" + Tet[tet*4+1] + " " + Force[Tet[tet*4+1]]);
+			// 	Debug.Log("update Force" + Tet[tet*4+2] + " " + Force[Tet[tet*4+2]]);
+			// 	Debug.Log("update Force" + Tet[tet*4+3] + " " + Force[Tet[tet*4+3]]);
+			// }
 
     	}
 
 		Laplacian_Smooth();
 
-    	// for(int i=0; i<number; i++)
-    	// {
-    	// 	//TODO: Update X and V here.
-		// 	// Debug.Log("prev v" + i + " " + V[i]);
-		// 	V[i] += dt * Force[i] / mass;
-		// 	V[i] *= damp;
-
-		// 	X[i] += dt * V[i];
-
-    	// 	//TODO: (Particle) collision with floor.
-				
-		// 	if ((Vector3.Dot((X[i] - floor_plane), floor_normal)) < 0 && Vector3.Dot(V[i], floor_normal) < 0) {
-		// 		Vector3 v_ni = Vector3.Dot(V[i], floor_normal) * floor_normal;
-		// 		Vector3 v_ti = V[i] - v_ni;
-		// 		// reduce oscillation
-		// 		restitution = Mathf.Max(restitution - 0.001f, 0); 
-		// 		float a = Mathf.Max(0, 1.0f - frition * (1 + restitution) * v_ni.magnitude / v_ti.magnitude);
-		// 		v_ni = -restitution * v_ni;
-		// 		v_ti = a * v_ti;
-		// 		V[i] = v_ni + v_ti;
-		// 		X[i] -= Vector3.Dot((X[i] - floor_plane), floor_normal) * floor_normal;
-		// 	}
-		// 	if(i == 0) {
-		// 		Debug.Log("update v" + i + " " + V[i]);
-		// 		Debug.Log("update x" + i + " " + X[i]);
-		// 	}
-    	// }
-		for(int i = 0; i < number; i++)
+    	for(int i=0; i<number; i++)
     	{
     		//TODO: Update X and V here.
-            V[i] += dt * Force[i] / mass;
-            V[i] *= damp;
-            X[i] += dt * V[i];
-            
-            //TODO: (Particle) collision with floor.
-            float signedDis = Vector3.Dot(X[i] - floorPos, floorNormal);
-            if (signedDis < 0 && Vector3.Dot(V[i], floorNormal) < 0)
-            {
-	            X[i] -= signedDis * floorNormal;
-	            Vector3 vN = Vector3.Dot(V[i], floorNormal) * floorNormal;
-	            Vector3 vT = V[i] - vN;
-	            float a = Math.Max(1 - muT * (1 + muN) * vN.magnitude / vT.magnitude, 0);
-	            V[i] = -muN * vN + a * vT;
-            }
-			if(i == 0) {
-				Debug.Log("update v" + i + " " + V[i]);
-				Debug.Log("update x" + i + " " + X[i]);
-			}
-        }
+			// Debug.Log("prev v" + i + " " + V[i]);
+			V[i] += dt * Force[i] / mass;
+			V[i] *= damp;
 
+			X[i] += dt * V[i];
+
+    		//TODO: (Particle) collision with floor.
+				
+			if ((Vector3.Dot((X[i] - floor_plane), floor_normal)) < 0 && Vector3.Dot(V[i], floor_normal) < 0) {
+				Vector3 v_ni = Vector3.Dot(V[i], floor_normal) * floor_normal;
+				Vector3 v_ti = V[i] - v_ni;
+				// reduce oscillation
+				restitution = Mathf.Max(restitution - 0.001f, 0); 
+				float a = Mathf.Max(0, 1.0f - frition * (1 + restitution) * v_ni.magnitude / v_ti.magnitude);
+				v_ni = -restitution * v_ni;
+				v_ti = a * v_ti;
+				V[i] = v_ni + v_ti;
+				X[i] -= Vector3.Dot((X[i] - floor_plane), floor_normal) * floor_normal;
+			}
+			// if(i == 0) {
+			// 	Debug.Log("update v" + i + " " + V[i]);
+			// 	Debug.Log("update x" + i + " " + X[i]);
+			// }
+    	}
     }
 
     // Update is called once per frame
