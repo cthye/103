@@ -28,6 +28,7 @@ public class FVM : MonoBehaviour
 	int[]		V_num;
 
 	SVD svd = new SVD();
+	public bool isSvd = false;
 
 	// floor plane and normal
 	Vector3 floor_plane = new Vector3(0, -3.0f, 0);
@@ -198,24 +199,64 @@ public class FVM : MonoBehaviour
 			Matrix4x4 F = deformedMatrix * inv_Dm[tet]; // deformation gradient
 			// if(tet == 0)
 			// 	Debug.Log("F" + tet+ " " + F);
+			Matrix4x4 P = Matrix4x4.zero;
+    		if(isSvd) {
+				Matrix4x4 U = Matrix4x4.zero;
+				Matrix4x4 S = Matrix4x4.zero;
+				Matrix4x4 V = Matrix4x4.zero;
+				Matrix4x4 diag = Matrix4x4.zero;
+				svd.svd(F, ref  U, ref  S, ref  V);
+				float lambda0 = S[0, 0];
+				float lambda1 = S[1, 1];
+				float lambda2 = S[2, 2];
+				float Ic = lambda0 * lambda0 + lambda1 * lambda1 + lambda2 * lambda2;
+				float IIc = lambda0 * lambda0 * lambda0 * lambda0 + lambda1 * lambda1 * lambda1 * lambda1 + lambda2 * lambda2 * lambda2 * lambda2;
+				float J = lambda0 * lambda1 * lambda2;
+				float IIIc = J * J;
+				
+				// float dW_dIc = stiffness_0 * (Ic - 3.0f) - stiffness_1 / 2.0f;
+				float dW_dIc = 0.25f * stiffness_0 * (Ic - 3.0f) - stiffness_1 / 2.0f;
+				float dW_dIIc = 0.25f * stiffness_1;
+		        float dW_dIIIc = 0;
 
-    		
-    		//TODO: Green Strain
+				float dIc_dl0 = 2.0f * lambda0;
+				float dIc_dl1 = 2.0f * lambda1;
+				float dIc_dl2 = 2.0f * lambda2;
 
-			Matrix4x4 G = Matrix_Multiply_With_Float(Matrix_Subtraction(F.transpose * F,  Matrix4x4.identity), 0.5f);
-			// if(tet == 0)
-			// 	Debug.Log("G" + tet+ " " + G);
+				float dIIc_dl0 = 4 * lambda0 * lambda0 * lambda0;
+				float dIIc_dl1 = 4 * lambda1 * lambda1 * lambda1;
+				float dIIc_dl2 = 4 * lambda2 * lambda2 * lambda2;
 
 
-    		//TODO: Second PK Stress
+				float dIIIc_dl0 = 2.0f * lambda0 * lambda1 * lambda1 * lambda2 * lambda2;
+				float dIIIc_dl1 = 2.0f * lambda1 * lambda0 * lambda0 * lambda2 * lambda2;
+				float dIIIc_dl2 = 2.0f * lambda2 * lambda0 * lambda0 * lambda1 * lambda1;
 
-			Matrix4x4 S = Matrix_Add(Matrix_Multiply_With_Float(G, 2.0f * stiffness_1), Matrix_Multiply_With_Float(Matrix4x4.identity, stiffness_0 * trace(G)));
-			// if(tet == 0)
-			// 	Debug.Log("S" + tet+ " " + S);
+				
+				diag[0, 0] = dW_dIc * dIc_dl0 + dW_dIIc * dIIc_dl0 + dW_dIIIc * dIIIc_dl0;
+				diag[1, 1] = dW_dIc * dIc_dl1 + dW_dIIc * dIIc_dl1 + dW_dIIIc * dIIIc_dl1;
+				diag[2, 2] = dW_dIc * dIc_dl2 + dW_dIIc * dIIc_dl2 + dW_dIIIc * dIIIc_dl2;
 
-			Matrix4x4 P = F * S;
-			// if(tet == 0)
-			// 	Debug.Log("P" + tet+ " " + P);
+				P = U * diag * V.transpose;
+
+			} else {
+				//TODO: Green Strain
+
+				Matrix4x4 G = Matrix_Multiply_With_Float(Matrix_Subtraction(F.transpose * F,  Matrix4x4.identity), 0.5f);
+				// if(tet == 0)
+				// 	Debug.Log("G" + tet+ " " + G);
+
+
+				//TODO: Second PK Stress
+
+				Matrix4x4 S = Matrix_Add(Matrix_Multiply_With_Float(G, 2.0f * stiffness_1), Matrix_Multiply_With_Float(Matrix4x4.identity, stiffness_0 * trace(G)));
+				// if(tet == 0)
+				// 	Debug.Log("S" + tet+ " " + S);
+
+				P = F * S;
+				// if(tet == 0)
+				// 	Debug.Log("P" + tet+ " " + P);
+			}
 
     		//TODO: Elastic Force
 			Matrix4x4 Forces = Matrix_Multiply_With_Float(P * inv_Dm[tet].transpose, - 1.0f / (6.0f * inv_Dm[tet].determinant)) ;
@@ -240,7 +281,6 @@ public class FVM : MonoBehaviour
 			// 	Debug.Log("update Force" + Tet[tet*4+2] + " " + Force[Tet[tet*4+2]]);
 			// 	Debug.Log("update Force" + Tet[tet*4+3] + " " + Force[Tet[tet*4+3]]);
 			// }
-
     	}
 
 		Laplacian_Smooth();
